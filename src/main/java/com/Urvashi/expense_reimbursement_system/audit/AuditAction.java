@@ -1,4 +1,21 @@
 package com.Urvashi.expense_reimbursement_system.audit;
 
-public class AuditAction {
+public enum AuditAction {
+    USER_REGISTERED,
+    USER_UPDATED_BY_ADMIN,
+    CATEGORY_CREATED,
+    CATEGORY_UPDATED,
+    POLICY_CREATED,
+    POLICY_UPDATED,
+    CLAIM_CREATED,
+    CLAIM_EDITED,
+    CLAIM_SUBMITTED,
+    CLAIM_RESUBMITTED,
+    CLAIM_WITHDRAWN,
+    CLAIM_APPROVED,
+    CLAIM_REJECTED,
+    RECEIPT_UPLOADED,
+    CLAIM_FLAGGED,
+    FLAG_RESOLVED,
+    REIMBURSEMENT_PROCESSED
 }
