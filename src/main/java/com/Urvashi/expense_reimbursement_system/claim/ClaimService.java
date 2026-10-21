@@ -8,6 +8,9 @@ import com.Urvashi.expense_reimbursement_system.claim.dto.StatusHistoryResponse;
 import com.Urvashi.expense_reimbursement_system.common.dto.PageResponse;
 import com.Urvashi.expense_reimbursement_system.common.exception.BusinessRuleException;
 import com.Urvashi.expense_reimbursement_system.common.exception.ResourceNotFoundException;
+import com.Urvashi.expense_reimbursement_system.fraud.ClaimFlagRepository;                 // NEW
+import com.Urvashi.expense_reimbursement_system.fraud.DuplicateDetectionService;          // NEW
+import com.Urvashi.expense_reimbursement_system.fraud.FlagStatus;                         // NEW
 import com.Urvashi.expense_reimbursement_system.policy.ExpenseCategory;
 import com.Urvashi.expense_reimbursement_system.policy.PolicyService;
 import com.Urvashi.expense_reimbursement_system.user.Role;
@@ -35,6 +38,8 @@ public class ClaimService {
     private final PolicyService policyService;
     private final UserService userService;
     private final AuditService auditService;
+    private final DuplicateDetectionService duplicateDetectionService;   // NEW
+    private final ClaimFlagRepository flagRepository;                    // NEW
 
     // =====================================================================
     //  Employee actions (on their OWN claims)
@@ -101,6 +106,11 @@ public class ClaimService {
 
         auditService.record(user, resubmission ? AuditAction.CLAIM_RESUBMITTED : AuditAction.CLAIM_SUBMITTED,
                 "CLAIM", claim.getId(), "Assigned to manager " + manager.getFullName());
+
+        // NEW: check for duplicates and policy violations. This only RAISES flags for the manager
+        // to review; it never blocks or rejects the claim.
+        duplicateDetectionService.checkAndFlag(claim);
+
         return ClaimResponse.from(claim);
     }
 
@@ -124,6 +134,13 @@ public class ClaimService {
         User reviewer = userService.getEntityByEmail(reviewerEmail);
         ExpenseClaim claim = findClaim(id);
         requireAssignedReviewer(claim, reviewer);
+
+        // NEW: every flag must be reviewed by a human before the claim can be approved
+        if (flagRepository.existsByClaimIdAndStatus(claim.getId(), FlagStatus.OPEN)) {
+            throw new BusinessRuleException(
+                    "This claim has open flags. Review and resolve them before approving.",
+                    HttpStatus.CONFLICT);
+        }
 
         changeStatus(claim, ClaimStatus.MANAGER_APPROVED, reviewer, blankToNull(comment));
         auditService.record(reviewer, AuditAction.CLAIM_APPROVED, "CLAIM", claim.getId(),
@@ -201,7 +218,7 @@ public class ClaimService {
     }
 
     // =====================================================================
-    //  Helpers that later modules (receipt, fraud, reimbursement) will reuse
+    //  Helpers that later modules (receipt, fraud, reimbursement) reuse
     // =====================================================================
 
     // Returns the claim only if this user is allowed to see it, otherwise 403
